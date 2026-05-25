@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PcapCapture IDS Console</title>
+    <meta
+      name="description"
+      content="Real-time network intrusion detection dashboard with flow analytics and machine learning decisions."
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="sidebar" aria-label="Primary navigation">
+        <div class="brand">
+          <div class="brand-icon"><i class="fa-solid fa-crosshairs"></i></div>
+          <span class="brand-name">PcapCapture</span>
+        </div>
+
+        <div class="nav-section">Core</div>
+        <ul class="nav-list">
+          <li class="nav-item active" data-view-target="overview">
+            <i class="fa-solid fa-chart-pie"></i>
+            <span>Analytics</span>
+          </li>
+          <li class="nav-item" data-view-target="events">
+            <i class="fa-solid fa-satellite-dish"></i>
+            <span>Live Capture</span>
+          </li>
+          <li class="nav-item" data-view-target="alerts">
+            <i class="fa-solid fa-magnifying-glass-chart"></i>
+            <span>Deep Inspect</span>
+          </li>
+          <li class="nav-item" data-view-target="model">
+            <i class="fa-solid fa-microchip"></i>
+            <span>Model Health</span>
+          </li>
+        </ul>
+
+        <div class="nav-section">Operations</div>
+        <section class="side-card">
+          <div class="panel-heading">
+            <h2>Sensor Control</h2>
+            <span class="panel-code">LIVE</span>
+          </div>
+          <label>
+            Interface
+            <input id="interface-input" type="text" list="interface-options" placeholder="Default interface" />
+            <datalist id="interface-options"></datalist>
+          </label>
+          <label>
+            Capture filter
+            <input id="filter-input" type="text" placeholder="tcp or udp" />
+          </label>
+          <div class="button-row">
+            <button id="start-capture" class="primary">Start</button>
+            <button id="stop-capture">Stop</button>
+          </div>
+        </section>
+
+        <section class="side-card">
+          <div class="panel-heading">
+            <h2>Offline Evidence</h2>
+            <span class="panel-code">PCAP</span>
+          </div>
+          <label>
+            Offline capture
+            <input id="pcap-input" type="file" accept=".pcap,.pcapng,.cap" />
+          </label>
+          <button id="analyze-pcap" class="primary">Analyze PCAP</button>
+          <p id="pcap-result" class="muted"></p>
+        </section>
+
+        <section class="side-card">
+          <div class="panel-heading">
+            <h2>Log Vault</h2>
+            <span class="panel-code">STORE</span>
+          </div>
+          <p class="muted">Export stored events or clear the current dashboard history.</p>
+          <div class="tool-stack">
+            <button id="export-logs">Export Logs</button>
+            <button id="clear-logs" class="danger">Clear Stored Logs</button>
+          </div>
+          <p id="export-result" class="muted"></p>
+        </section>
+      </nav>
+
+      <main class="content">
+        <header class="topbar">
+          <div>
+            <h1>Threat Analytics</h1>
+            <p class="topbar-sub">Real-time network flow classification · two-stage ML pipeline</p>
+          </div>
+          <div class="topbar-actions">
+            <span id="api-status" class="status-pill neutral">
+              <span class="dot-live"></span>
+              API checking
+            </span>
+            <span id="capture-status" class="status-pill neutral">Capture stopped</span>
+            <span id="model-status" class="status-pill neutral">Model unknown</span>
+            <span id="device-status" class="status-pill neutral">Sensor unknown</span>
+          </div>
+        </header>
+
+        <section class="kpi-row" data-view="overview alerts events model" aria-label="Live metrics">
+          <article class="kpi">
+            <div class="kpi-label">Flows Analyzed</div>
+            <div class="kpi-value" id="metric-packets">0</div>
+            <div class="kpi-meta up"><i class="fa-solid fa-arrow-trend-up"></i> Live stream</div>
+          </article>
+          <article class="kpi">
+            <div class="kpi-label">Threats Detected</div>
+            <div class="kpi-value rose" id="metric-alerts">0</div>
+            <div class="kpi-meta down"><i class="fa-solid fa-shield-halved"></i> Deduplicated feed</div>
+          </article>
+          <article class="kpi">
+            <div class="kpi-label">Encrypted Flows</div>
+            <div class="kpi-value emerald" id="metric-encrypted">0</div>
+            <div class="kpi-meta up"><i class="fa-solid fa-lock"></i> TLS metadata</div>
+          </article>
+          <article class="kpi">
+            <div class="kpi-label">Unique Signatures</div>
+            <div class="kpi-value amber" id="metric-critical">0</div>
+            <div class="kpi-meta neutral"><i class="fa-solid fa-fingerprint"></i> Critical classes</div>
+          </article>
+        </section>
+
+        <section class="row-2" data-view="overview">
+          <section class="card">
+            <div class="card-head">
+              <div class="card-title"><i class="fa-solid fa-wave-square"></i> Traffic Volume</div>
+              <span class="badge-sm">Recent window</span>
+            </div>
+            <div class="chart-box"><canvas id="chartTraffic"></canvas></div>
+          </section>
+          <section class="card">
+            <div class="card-head">
+              <div class="card-title"><i class="fa-solid fa-virus"></i> Attack Distribution</div>
+              <span class="badge-sm" id="timeline-total">0 alerts</span>
+            </div>
+            <div class="chart-box"><canvas id="chartAttacks"></canvas></div>
+          </section>
+        </section>
+
+        <section class="row-3" data-view="overview alerts">
+          <section class="card">
+            <div class="card-head">
+              <div class="card-title"><i class="fa-solid fa-chart-column"></i> Top Target Ports</div>
+            </div>
+            <div class="chart-box-sm"><canvas id="chartPorts"></canvas></div>
+          </section>
+          <section class="card">
+            <div class="card-head">
+              <div class="card-title"><i class="fa-solid fa-network-wired"></i> Top Source IPs</div>
+            </div>
+            <div class="chart-box-sm"><canvas id="chartSourceIPs"></canvas></div>
+          </section>
+          <section class="card">
+            <div class="card-head">
+              <div class="card-title"><i class="fa-solid fa-code-fork"></i> Protocol Distribution</div>
+            </div>
+            <div class="chart-box-sm"><canvas id="chartProtocols"></canvas></div>
+          </section>
+        </section>
+
+        <section class="row-2" data-view="overview alerts">
+          <section class="card">
+            <div class="card-head">
+              <div>
+                <div class="card-title"><i class="fa-solid fa-triangle-exclamation"></i> Deduplicated Alerts</div>
+                <p class="topbar-sub">One pop-up per source IP and attack type</p>
+              </div>
+              <div class="table-tools">
+                <span id="socket-status" class="badge-sm">Connecting</span>
+                <span id="alert-pref-badge" class="badge-sm">Pop-ups off</span>
+              </div>
+            </div>
+            <div class="alert-pref-row">
+              <p id="alert-pref-note" class="muted">Choose whether the dashboard should show alert pop-ups.</p>
+              <div class="button-row">
+                <button id="enable-alerts" class="primary">Enable Pop-ups</button>
+                <button id="mute-alerts">Mute Pop-ups</button>
+                <button id="reset-alert-memory">Reset Alert Memory</button>
+              </div>
+            </div>
+            <div id="alert-queue" class="alert-queue"></div>
+          </section>
+          <section class="card">
+            <div class="card-head">
+              <div class="card-title"><i class="fa-solid fa-route"></i> Top Sources & Targets</div>
+              <span id="entity-total" class="badge-sm">0 entities</span>
+            </div>
+            <div class="entity-grid">
+              <div>
+                <h3>Sources</h3>
+                <div id="top-sources" class="rank-list"></div>
+              </div>
+              <div>
+                <h3>Targets</h3>
+                <div id="top-targets" class="rank-list"></div>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section class="card" data-view="overview events">
+          <div class="card-head feed-head">
+            <div>
+              <div class="card-title"><i class="fa-solid fa-scroll"></i> Detection Feed</div>
+              <p class="topbar-sub">Live packet metadata, flow context, and ML verdicts</p>
+            </div>
+            <div class="table-tools">
+              <input id="search-input" type="search" placeholder="Search IP, rule, protocol" />
+              <select id="severity-filter" aria-label="Severity filter">
+                <option value="all">All severities</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+              <select id="action-filter" aria-label="Action filter">
+                <option value="all">All actions</option>
+                <option value="alert">Alert</option>
+                <option value="warning">Warning</option>
+                <option value="blocked">Blocked</option>
+                <option value="allow">Allow</option>
+              </select>
+              <span class="badge-sm" id="log-count">0 entries</span>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Source</th>
+                  <th>Dst Port</th>
+                  <th>Verdict</th>
+                  <th>Attack Class</th>
+                  <th>Severity</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="log-table"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="row-2" data-view="model alerts events">
+          <section class="card" data-view="model">
+            <div class="card-head">
+              <div class="card-title"><i class="fa-solid fa-microchip"></i> Model Health</div>
+              <span id="model-type" class="badge-sm">Loading</span>
+            </div>
+            <div id="model-health" class="model-health"></div>
+          </section>
+          <section class="card" data-view="alerts model events">
+            <div class="card-head">
+              <div class="card-title"><i class="fa-solid fa-circle-info"></i> Selected Event</div>
+              <span id="selected-severity" class="tag">None</span>
+            </div>
+            <dl id="event-details" class="details">
+              <dt>Status</dt>
+              <dd>Select an event row to inspect packet metadata.</dd>
+            </dl>
+          </section>
+        </section>
+
+        <section class="row-2" data-view="alerts events">
+          <section class="card">
+            <div class="card-head">
+              <div class="card-title"><i class="fa-solid fa-chart-simple"></i> Alert Timeline</div>
+              <span class="badge-sm">Recent window</span>
+            </div>
+            <div id="alert-timeline" class="timeline-list"></div>
+          </section>
+          <section class="card">
+            <div class="card-head">
+              <div class="card-title"><i class="fa-solid fa-circle-nodes"></i> Sensor & Policy</div>
+              <span class="badge-sm">Runtime</span>
+            </div>
+            <div class="runtime-grid">
+              <dl id="device-details" class="details">
+                <dt>Status</dt>
+                <dd>Loading sensor identity.</dd>
+              </dl>
+              <div>
+                <p id="model-contract" class="muted">Loading model details.</p>
+                <div id="rule-summary" class="rule-summary"></div>
+                <div id="rule-list" class="rule-list"></div>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section class="side-card response-drawer" data-view="events alerts">
+          <div class="panel-heading">
+            <h2>Manual Response</h2>
+            <span id="block-mode-badge" class="panel-code">MEMORY</span>
+          </div>
+          <div class="button-row">
+            <button id="use-memory-mode">Memory Mode</button>
+            <button id="use-firewall-mode" class="danger">Firewall Mode</button>
+          </div>
+          <div class="response-row">
+            <input id="manual-ip" type="text" placeholder="192.168.1.25" />
+            <button id="manual-block" class="danger">Block IP</button>
+          </div>
+          <p id="warning-summary" class="muted">Recon warnings are clear.</p>
+          <ul id="blocklist" class="blocklist"></ul>
+        </section>
+
+        <div id="traffic-mix" hidden></div>
+        <span id="mix-total" hidden>0 events</span>
+        <strong id="metric-blocked" hidden>0</strong>
+        <strong id="metric-top-talker" hidden>-</strong>
+      </main>
+    </div>
+
+    <div id="toast-tray" class="toast-tray" aria-live="polite" aria-atomic="false"></div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
