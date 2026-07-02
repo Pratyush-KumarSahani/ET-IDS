@@ -1,125 +1,247 @@
-# Encrypted Traffic IDS
+# ThreatPulse: A Two-Stage Machine Learning Intrusion Detection System
 
-FastAPI-based intrusion detection dashboard for encrypted traffic monitoring. The app captures packet metadata only, streams real-time logs to a browser dashboard, supports manual blocking from logs, and can use the trained `pipeline.pkl` plus `label_encoder.pkl` artifacts from `train.ipynb` when available.
+ThreatPulse is a real-time Intrusion Detection System (IDS) developed as our final-year research project. It uses Machine Learning to detect malicious network traffic by analyzing network flow metadata instead of packet payloads, making it effective even when traffic is encrypted.
 
-## Setup
+The system captures live packets, extracts important flow features, classifies traffic using a two-stage XGBoost model, and displays the results through a FastAPI-based web dashboard. It also supports automatic IP blocking for detected threats.
 
-Use a stable Python release such as Python 3.11 or 3.12. Avoid Python alpha builds because compiled packages such as `pydantic-core`, `scikit-learn`, and `xgboost` may fail to import.
+---
 
-```powershell
+## Features
+
+- Live packet capture using Scapy
+- Flow-based feature extraction
+- Two-stage XGBoost detection pipeline
+  - Binary classification (Benign or Malicious)
+  - Attack type classification
+- FastAPI dashboard with real-time updates
+- Live attack logs and traffic monitoring
+- Automatic IP blocking (optional)
+- Windows Firewall integration
+- SQLite database for storing logs
+- Lightweight and runs on a normal laptop without a GPU
+
+---
+
+## How It Works
+
+```
+Network Traffic
+      │
+      ▼
+Packet Capture (Scapy)
+      │
+      ▼
+Flow Feature Extraction
+      │
+      ▼
+Stage 1: Binary Detection
+(Benign / Malicious)
+      │
+      ▼
+Stage 2: Attack Classification
+      │
+      ▼
+FastAPI Dashboard
+      │
+      ▼
+Alert & IP Blocking
+```
+
+---
+
+## Technologies Used
+
+**Machine Learning**
+
+- XGBoost
+- Scikit-learn
+- Pandas
+- NumPy
+- Joblib
+
+**Backend**
+
+- FastAPI
+- Uvicorn
+- WebSockets
+
+**Packet Capture**
+
+- Scapy
+- Npcap (Windows)
+
+**Frontend**
+
+- HTML
+- CSS
+- JavaScript
+- Chart.js
+
+**Database**
+
+- SQLite
+
+---
+
+## Datasets Used
+
+The model was trained and evaluated using multiple benchmark datasets to improve its performance across different network environments.
+
+- CICIDS2017
+- NF-UNSW-NB15-v2
+- NF-ToN-IoT-v2
+- CICIOT2023
+
+---
+
+## Model Files
+
+Place the trained model files inside the **models** folder.
+
+```
+models/
+│
+├── binary_pipeline.pkl
+├── binary_label_encoder.pkl
+├── attack_pipeline.pkl
+├── attack_label_encoder.pkl
+└── feature_columns.pkl
+```
+
+The application also supports the older single-model format:
+
+```
+pipeline.pkl
+label_encoder.pkl
+```
+
+---
+
+## Installation
+
+Clone the repository:
+
+```bash
+git clone https://github.com/yourusername/ThreatPulse.git
+cd ThreatPulse
+```
+
+Install the required packages:
+
+```bash
 pip install -r requirements.txt
 ```
 
-Put model artifacts in one of these locations:
+If you're using Windows, install **Npcap** before running live packet capture.
 
-- `D:\ET-IDS\pipeline.pkl`
-- `D:\ET-IDS\models\pipeline.pkl`
-- `D:\models\pipeline.pkl`
+---
 
-The app also supports the newer two-stage ML model layout. If these files exist in `D:\ET-IDS\models`, they are loaded first and used for live attack/type decisions:
+## Running the Project
 
-- `binary_pipeline.pkl`
-- `binary_label_encoder.pkl`
-- `attack_pipeline.pkl`
-- `attack_label_encoder.pkl`
-- `feature_columns.pkl`
-
-Live attack labels are gated to reduce noisy false positives: a flow must have at least 8 packets, at least 2 seconds of observed duration, and attack confidence of 80% or higher before the dashboard shows a specific attack alert. Override the confidence threshold with:
+Start the application using the helper script:
 
 ```powershell
-$env:IDS_ATTACK_CONFIDENCE_THRESHOLD="90"
-```
-
-Or configure explicit paths:
-
-```powershell
-$env:IDS_MODEL_PATH="D:\ET-IDS\models\pipeline.pkl"
-$env:IDS_LABEL_ENCODER_PATH="D:\ET-IDS\models\label_encoder.pkl"
-$env:IDS_BINARY_MODEL_PATH="D:\ET-IDS\models\binary_pipeline.pkl"
-$env:IDS_ATTACK_MODEL_PATH="D:\ET-IDS\models\attack_pipeline.pkl"
-```
-
-## Run
-
-For the full dashboard with dependency installation and live packet capture enabled:
-
-```powershell
-cd D:\ET-IDS\et-ids
 .\start_ids.ps1
 ```
-
-Open:
-
-```text
-http://localhost:8000
-```
-
-Run PowerShell as Administrator for live packet capture on Windows. Install Npcap first if capture does not start.
 
 Useful options:
 
 ```powershell
 .\start_ids.ps1 -OpenDashboard
-.\start_ids.ps1 -CaptureInterface "Ethernet" -CaptureFilter "tcp port 443"
+.\start_ids.ps1 -CaptureInterface "Ethernet"
+.\start_ids.ps1 -CaptureFilter "tcp port 443"
 .\start_ids.ps1 -NoCapture
 .\start_ids.ps1 -UseWindowsFirewall
-.\start_ids.ps1 -SkipInstall
 ```
 
-Manual server run:
+Or run the FastAPI server manually:
 
-```powershell
+```bash
 uvicorn fastapi_ids_backend:app --host 0.0.0.0 --port 8000
 ```
 
-Open:
+Open your browser and visit:
 
-```text
+```
 http://localhost:8000
 ```
 
-Live capture usually requires Npcap on Windows and may require running the terminal as Administrator.
+> Live packet capture on Windows may require Administrator privileges and Npcap.
 
-You can also start the IDS appliance with the helper script:
+---
 
-```powershell
-.\start_ids.ps1 -Port 8000 -CaptureFilter "tcp port 443"
-```
+## Configuration
 
-For a specific interface:
+The application allows custom model paths through environment variables.
 
 ```powershell
-.\start_ids.ps1 -CaptureInterface "Ethernet" -CaptureFilter "host 192.168.1.10"
+IDS_BINARY_MODEL_PATH
+IDS_ATTACK_MODEL_PATH
+IDS_BINARY_LABEL_ENCODER_PATH
+IDS_ATTACK_LABEL_ENCODER_PATH
+IDS_FEATURE_COLUMNS_PATH
 ```
 
-The app stores device identity, logs, and blocked IPs in:
-
-```text
-D:\ET-IDS\et-ids\data
-```
-
-Override that location with:
+To change the confidence threshold:
 
 ```powershell
-$env:IDS_DATA_DIR="D:\ET-IDS\data"
+$env:IDS_ATTACK_CONFIDENCE_THRESHOLD="90"
 ```
 
-## Blocking Mode
+---
 
-By default, blocking is an in-app blocklist used by the dashboard and live logs:
+## Blocking Modes
+
+By default, detected IP addresses are stored in the application's internal blocklist.
 
 ```powershell
 $env:IDS_BLOCK_MODE="memory"
 ```
 
-To create Windows Firewall block rules from the dashboard:
+To automatically create Windows Firewall rules:
 
 ```powershell
 $env:IDS_BLOCK_MODE="windows_firewall"
 ```
 
-Use the firewall mode carefully because it changes host firewall rules.
+Administrator privileges are required for firewall mode.
 
-## Device Deployment Idea
+---
 
-For a host-based IDS, install this project on the web server or target device and capture the active network interface. For a network IDS, connect the device to a mirrored switch port or traffic mirror so it can see packets for the protected public IP. Passive capture can detect and log; blocking requires either local firewall mode or integration with the gateway firewall.
+## Performance
+
+- **Overall Accuracy:** 99.2%
+- **Average Detection Time:** ~3.5 ms per flow
+- **Runs entirely on CPU**
+- **Supports real-time monitoring**
+- **Live dashboard with attack logs**
+- **Optional automatic IP blocking**
+
+---
+
+## Project Workflow
+
+1. Capture live packets from the selected network interface.
+2. Convert packets into network flows.
+3. Extract flow-level features.
+4. Detect malicious traffic using the binary classifier.
+5. Identify the attack type using the second-stage classifier.
+6. Display alerts on the dashboard.
+7. Store logs and optionally block malicious IP addresses.
+
+---
+
+## Authors
+
+- Pratyush Kumar Sahani
+- Anurag Pattanaik
+- Rohan Mishra
+
+**Faculty of Engineering & Technology (ITER)**  
+**Siksha 'O' Anusandhan (Deemed to be) University**
+
+---
+
+## License
+
+This project was developed as part of our final-year research work and is intended for educational and research purposes.
